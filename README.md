@@ -26,4 +26,8 @@ The device is supposed to fulfill the following functions (in order of their pri
 
 ## Contributing
 
+We are happy to receive contributions! Please interact with us through the discussion page, pull requests or bug reports. 
+
 ## License
+
+This software is licensed under GPLv3. See the attached [license](./COPYING.md) for the full terms. Among other things, you may freely use, change and redistribute this software, but have to license and publish your changes under the same license.

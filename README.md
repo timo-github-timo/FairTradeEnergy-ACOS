@@ -24,6 +24,15 @@ The device is supposed to fulfill the following functions (in order of their pri
 
 ## Development environment
 
+- Arduino Software / compiler: https://www.arduino.cc/en/software
+The used version for this project is currently: IDE 2.3.3
+- It is mandatory to download the common libraries for the M5
+https://github.com/m5stack/M5Unified.git
+https://github.com/m5stack/M5GFX.git
+
+
+
+
 ## Contributing
 
 We are happy to receive contributions! Please interact with us through the discussion page, pull requests or bug reports. 

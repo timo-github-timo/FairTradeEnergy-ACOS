@@ -1,0 +1,1 @@
+// Logik für die Zustandsautomatik deines Energie-Managementsystems

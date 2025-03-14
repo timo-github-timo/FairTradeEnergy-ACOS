@@ -20,15 +20,12 @@ The device is supposed to fulfill the following functions (in order of their pri
 
 ### State diagram
 
-![state diagram](./resources/blockdiagram.drawio.svg)
+![state diagram](./docs/blockdiagram.drawio.svg)
 
 ## Development environment
-
-- Arduino Software / compiler: https://www.arduino.cc/en/software
-The used version for this project is currently: IDE 2.3.3
-- It is mandatory to download the common libraries for the M5
-https://github.com/m5stack/M5Unified.git
-https://github.com/m5stack/M5GFX.git
+- VSCode as the development environment
+- install PlatformIO IDE as an extension: https://platformio.org/
+- libaries don't have to be installed seperately. They automaticely get installed with the platformio.ini 
 
 
 

@@ -1,0 +1,13 @@
+# PlatformIO
+.pio/
+.piolibdeps/
+.piolibbuild/
+.pioenvs/
+.piopackages/
+
+# IDE
+.vscode/
+.idea/
+
+# System
+.DS_Store

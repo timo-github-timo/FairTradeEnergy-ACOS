@@ -25,7 +25,7 @@ The device is supposed to fulfill the following functions (in order of their pri
 ## Development environment
 - VSCode as the development environment
 - install PlatformIO IDE as an extension: https://platformio.org/
-- libaries don't have to be installed seperately. They automaticely get installed with the platformio.ini 
+- libaries don't have to be installed seperately. They automaticely get installed with the platformio.ini file
 
 
 

@@ -1,5 +1,5 @@
 # GNU GENERAL PUBLIC LICENSE
-TestPush
+TestPush2
 Version 3, 29 June 2007
 
 Copyright (C) 2007 Free Software Foundation, Inc.

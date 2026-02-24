@@ -1,27 +1,34 @@
 #pragma once
-#include <stdint.h>
-#include <stdbool.h>
+
+#include <Arduino.h>
+
+
+namespace pca9555 {
 
 // I2C-Adresse
-#define PCA9555_ADDR 0x20
+constexpr uint8_t ADDRESS = 0x20;
 
 // Register
-#define REG_INPUT_P0   0x00
-#define REG_INPUT_P1   0x01
-#define REG_OUTPUT_P0  0x02
-#define REG_OUTPUT_P1  0x03
-#define REG_CONFIG_P0  0x06
-#define REG_CONFIG_P1  0x07
+constexpr uint8_t REG_INPUT_P0  = 0x00;
+constexpr uint8_t REG_INPUT_P1  = 0x01;
+constexpr uint8_t REG_OUTPUT_P0 = 0x02;
+constexpr uint8_t REG_OUTPUT_P1 = 0x03;
+constexpr uint8_t REG_CONFIG_P0 = 0x06;
+constexpr uint8_t REG_CONFIG_P1 = 0x07;
 
-typedef enum {
-  PIN_GRID_ON  = (0<<8) | 4,
-  PIN_ISLE_ON  = (0<<8) | 5,
-  PIN_GI_SEL   = (0<<8) | 6,
-  PIN_NTC_HOT  = (0<<8) | 7,
-  PIN_ASEL1    = (1<<8) | 0,
-  PIN_ASEL2    = (1<<8) | 1,
-} PCA9555_Pin;
+// Pin-Definition
+enum class Pin : uint16_t {
+    GRID_ON  = (0 << 8) | 4,
+    ISLE_ON  = (0 << 8) | 5,
+    GI_SEL   = (0 << 8) | 6,
+    NTC_HOT  = (0 << 8) | 7,
+    ASEL1    = (1 << 8) | 0,
+    ASEL2    = (1 << 8) | 1,
+};
 
-void PCA9555_Init(void);
-void PCA9555_WritePin(PCA9555_Pin pin, bool level);
-bool PCA9555_ReadPin(PCA9555_Pin pin);
+// API
+void init();
+void writePin(Pin pin, bool level);
+bool readPin(Pin pin);
+
+}

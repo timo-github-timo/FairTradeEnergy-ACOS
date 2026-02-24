@@ -1,6 +1,6 @@
 // Pin Configuration
 
-// include/Pins.h
+include <Arduino.h>
 #pragma once
 
 // ——————————————————————————————————————————————————————————

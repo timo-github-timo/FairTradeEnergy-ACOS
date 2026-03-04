@@ -1,8 +1,6 @@
 #include <M5Unified.h>
 #include <lvgl.h>
 
-//Comment 1291
-
 // --- Display/Touch Parameter ---
 static const uint16_t SCREEN_WIDTH  = 320;
 static const uint16_t SCREEN_HEIGHT = 240;

@@ -1,9 +1,20 @@
 #include <M5Unified.h>
 #include <lvgl.h>
+#include "ui/ui.h"
+#include "touch/touch.h"
+
+#ifdef CAN_SIMULATION
+#include "drivers/can_bus_mock.h"
+#else
+#include "drivers/can_bus.h"
+#endif
+
+
+// CANBus Objekt global verfügbar machen
+CANBus can;
 
 // --- Display/Touch Parameter ---
-static const uint16_t SCREEN_WIDTH  = 320;
-static const uint16_t SCREEN_HEIGHT = 240;
+// moved to ui.h
 
 // LVGL Draw Buffer (z. B. 40 Zeilen)
 static lv_color_t buf1[SCREEN_WIDTH * 40];
@@ -24,34 +35,6 @@ static lv_obj_t* button0_label = nullptr; // Text von button0
 
 static int counter = 0;
 static uint32_t last_tick_ms = 0;
-
-// --- LVGL Display Flush (LVGL -> M5 LCD) ---
-static void my_disp_flush(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* color_p) {
-  const int32_t w = (area->x2 - area->x1 + 1);
-  const int32_t h = (area->y2 - area->y1 + 1);
-
-  M5.Display.startWrite();
-  M5.Display.setAddrWindow(area->x1, area->y1, w, h);
-  M5.Display.pushPixels((uint16_t*)&color_p->full, w * h);
-  M5.Display.endWrite();
-
-  lv_disp_flush_ready(drv);
-}
-
-// --- LVGL Touch Read (Touch -> LVGL) ---
-static void my_touch_read(lv_indev_drv_t* drv, lv_indev_data_t* data) {
-  (void)drv;
-  auto t = M5.Touch.getDetail();
-  if (t.isPressed()) {
-    data->state = LV_INDEV_STATE_PRESSED;
-    // Adjust touch coordinates for display rotation (setRotation(1))
-    // For rotation=1 (90°), swap and invert coordinates
-    data->point.x = t.y;                    // swap x <- y
-    data->point.y = SCREEN_WIDTH - t.x;     // invert and adjust
-  } else {
-    data->state = LV_INDEV_STATE_RELEASED;
-  }
-}
 
 // --- Button Events ---
 static void button2_event_handler(lv_event_t* e) {
@@ -139,6 +122,13 @@ void setup() {
   // LVGL init
   lv_init();
 
+  //CANBus init
+  Serial.begin(115200);
+    if (can.begin())
+        Serial.println("CAN initialized");
+    else
+        Serial.println("CAN init failed");
+
   // Draw Buffer
   lv_disp_draw_buf_init(&draw_buf, buf1, nullptr, sizeof(buf1) / sizeof(buf1[0]));
 
@@ -175,6 +165,7 @@ void loop() {
 
   // Logik analog zu deinem Python loop()
   counter += 1;
+  Serial.println("Counter: " + String(counter));
 
   // Label-Farbe Schritt 1 (pulsierender Grünanteil)
   uint8_t g = static_cast<uint8_t>(counter % 255);

@@ -9,9 +9,18 @@
 #include "drivers/can_bus.h"
 #endif
 
+// serial injector
+#include "drivers/can_serial_inject.h"
+
+// #include "drivers/io_expander.h" // IO Expander Header einbinden
+#include "drivers/io_expander.h"
 
 // CANBus Objekt global verfügbar machen
 CANBus can;
+CANSerialInject injector;     // for testing: inject CAN frames via serial input
+
+// IO Expander Objekt global verfügbar machen
+IOExpander io;
 
 // --- Display/Touch Parameter ---
 // moved to ui.h
@@ -125,9 +134,19 @@ void setup() {
   //CANBus init
   Serial.begin(115200);
     if (can.begin())
-        Serial.println("CAN initialized");
+    {   Serial.println("CAN initialized");
+        injector.begin(Serial);
+        Serial.println("\nType: CAN <id> <len> <data...>");
+        Serial.println("Example: CAN 100 2 12 34");
+    }
     else
-        Serial.println("CAN init failed");
+    {   Serial.println("CAN init failed\n");
+    }
+
+  bool ok = io.begin();
+  if (!ok) {
+    Serial.println("IO expander not found!");
+  }
 
   // Draw Buffer
   lv_disp_draw_buf_init(&draw_buf, buf1, nullptr, sizeof(buf1) / sizeof(buf1[0]));
@@ -155,6 +174,28 @@ void setup() {
 void loop() {
   M5.update();
 
+  injector.update(can);
+
+  // Normal CAN receive
+    if (can.available())
+    {
+        CANFrame frame;
+
+        if (can.read(frame))
+        {
+            Serial.print("RX ID: 0x");
+            Serial.println(frame.id, HEX);
+
+            Serial.print("DATA: ");
+            for (int i = 0; i < frame.length; i++)
+            {
+                Serial.print(frame.data[i], HEX);
+                Serial.print(" ");
+            }
+            Serial.println();
+        }
+    }
+
   // LVGL Tick an LVGL melden
   uint32_t now = millis();
   uint32_t elapsed = now - last_tick_ms;
@@ -165,7 +206,7 @@ void loop() {
 
   // Logik analog zu deinem Python loop()
   counter += 1;
-  Serial.println("Counter: " + String(counter));
+  // Serial.println("Counter: " + String(counter));
 
   // Label-Farbe Schritt 1 (pulsierender Grünanteil)
   uint8_t g = static_cast<uint8_t>(counter % 255);

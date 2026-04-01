@@ -1,196 +1,244 @@
-#include "Arduino.h"
+// ================================================================
+//  ACOS.cpp  —  Hauptprogramm (setup + loop)
+//
+//  Zyklus: 100ms
+//    1. Sensoren lesen (ADC + GPIO Optokoppler + PCA9555)
+//    2. Zustandsmaschine ticken
+//    3. Touch auswerten → Modus ändern
+//    4. CAN empfangen  → Modus / Fehler-Quittierung
+//    5. CAN Status senden (1Hz)
+//    6. Display aktualisieren
+//    7. Serial-Debug (2s Intervall)
+//    8. Serial-Befehle auswerten
+//    9. Loop-Timing einhalten
+// ================================================================
+
+#include <Arduino.h>
 #include <M5Unified.h>
-#include <mcp2515.h>
-#include "config.h"
 #include <Wire.h>
 #include <SPI.h>
 
+#include "config.h"
 #include "pca9555_module.h"
+#include "adc_reader.h"
+#include "state_machine.h"
 #include "can_module.h"
 #include "display_module.h"
 
-// ================================================================
-//  Anzeigedaten  (werden in loop() befüllt und an display_update()
-//  übergeben — Platzhalter bis echte Messwerte vorliegen)
-// ================================================================
-static DisplayData g_disp = {
-    .u_grid = 0.0f,
-    .f_grid = 0.0f,
-    .soc    = 0,
-    .batt_v = 0.0f,
-    .status = "Initialisierung..."
-};
+// ----------------------------------------------------------------
+//  Globaler Betriebsmodus
+//  Touch und CAN schreiben, sm_tick() liest.
+// ----------------------------------------------------------------
+static OperatingMode g_mode = MODE_AUTO;
 
-// ================================================================
-//  PCA9555 — Interrupt-State
-//  Der Callback läuft im IRQ-Task-Kontext → nur volatile State
-//  setzen, Logik unten in handle_io_change() bzw. loop().
-// ================================================================
-// volatile nur für das Flag nötig (wird in loop() gepollt).
-// g_inputs liegt im FreeRTOS-Task-Kontext — kein volatile erforderlich,
-// FreeRTOS sorgt intern für Memory Barriers.
-static volatile bool  g_io_updated = false;
-static Pca9555Inputs  g_inputs     = {};
+// ----------------------------------------------------------------
+//  PCA9555 Interrupt-Callback
+//  Läuft im IRQ-Task (Core 1, normaler Task-Kontext).
+//  Nur Flag + Struct setzen — keine langen Operationen.
+// ----------------------------------------------------------------
+static volatile bool g_io_updated = false;
+static Pca9555Inputs g_inputs     = {};
 
 static void on_io_change(const Pca9555Inputs& in) {
-    g_inputs     = in;     // einfache Struct-Zuweisung, kein volatile-Konflikt
+    g_inputs     = in;
     g_io_updated = true;
 }
 
-// ================================================================
-//  Eingangsänderungen verarbeiten
-//  Wird aus loop() aufgerufen, sobald g_io_updated gesetzt ist.
-// ================================================================
-static void handle_io_change() {
-    // Lokale Kopie anlegen, Flag zurücksetzen
-    Pca9555Inputs in = g_inputs;
-    g_io_updated     = false;
+// ----------------------------------------------------------------
+//  Optokoppler-Eingänge lesen  (GPIO, active-LOW)
+// ----------------------------------------------------------------
+static inline bool read_grid_ok() { return digitalRead(PIN_nVGRID)    == LOW; }
+static inline bool read_grid_ov() { return digitalRead(PIN_nVGRID_OV) == LOW; }
+static inline bool read_load_on() { return digitalRead(PIN_nVLOAD)    == LOW; }
+static inline bool read_isle_ok() { return digitalRead(PIN_nVISLE)    == LOW; }
 
-    // --- NTC Übertemperatur (IO0_3) ---------------------------------
-    if (in.ntc_hot) {
-        Serial.println("[WARNUNG] NTC Übertemperatur erkannt!");
-        // TODO: Relais abschalten, Fehler-State setzen
-    }
-
-    // --- Spannungsüberwachung (Port 1, OC active-LOW) ---------------
-    if (in.vg2) {
-        Serial.println("[IO] Spannung L_G2 erkannt (VG2)");
-    } else {
-        Serial.println("[IO] Spannung L_G2 verloren (VG2)");
-    }
-
-    if (in.vi2) {
-        Serial.println("[IO] Spannung L_I2 erkannt (VI2)");
-    } else {
-        Serial.println("[IO] Spannung L_I2 verloren (VI2)");
-    }
-
-    if (in.vgi) {
-        Serial.println("[IO] Spannung L_GI erkannt (VGI)");
-    } else {
-        Serial.println("[IO] Spannung L_GI verloren (VGI)");
-    }
-
-    // --- Externe I/Os (IO1_5–IO1_7) ---------------------------------
-    for (uint8_t i = 0; i < 3; i++) {
-        Serial.printf("[IO] IO_%u = %s\n", i, in.io[i] ? "HIGH" : "LOW");
-    }
+// ----------------------------------------------------------------
+//  Alle Sensoren lesen → SensorReadings befüllen
+// ----------------------------------------------------------------
+static void read_sensors(SensorReadings& s) {
+    adc_read_all(s.v_grid, s.v_batt, s.v_load);
+    s.soc     = adc_calc_soc(s.v_batt);
+    s.grid_ok = read_grid_ok();
+    s.grid_ov = read_grid_ov();
+    s.load_on = read_load_on();
+    s.isle_ok = read_isle_ok();
+    s.ntc_hot = g_inputs.ntc_hot;  // aus letztem PCA9555-Interrupt
 }
 
-// ================================================================
+// ----------------------------------------------------------------
+//  Klartext-Namen für Serial und Display
+// ----------------------------------------------------------------
+static const char* const STATE_NAMES[] = {
+    "AUS", "Insel", "Netz", "->Netz...", "->Insel...", "FEHLER"
+};
+static const char* const MODE_NAMES[] = {
+    "Auto", "Hand:Netz", "Hand:Insel", "Hand:Aus"
+};
+
+// ----------------------------------------------------------------
 //  Setup
-// ================================================================
+// ----------------------------------------------------------------
 void setup() {
     Serial.begin(115200);
 
     auto cfg = M5.config();
     M5.begin(cfg);
 
-    Wire.begin();
+    // I²C mit expliziten Pins (ST1 Pin 13/14: SCL=G11, SDA=G12)
+    Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
 
-    // --- PCA9555 initialisieren (INT-Pin aus config.h) ---------------
+    // Optokoppler-Eingänge (active-LOW, open-collector)
+    pinMode(PIN_nVGRID,    INPUT_PULLUP);
+    pinMode(PIN_nVGRID_OV, INPUT_PULLUP);
+    pinMode(PIN_nVLOAD,    INPUT_PULLUP);
+    pinMode(PIN_nVISLE,    INPUT_PULLUP);
+
+    // PCA9555 initialisieren — Safe State wird intern gesetzt
     if (!pca9555_init(PIN_PCA9555_INT, on_io_change)) {
         Serial.println("[FEHLER] IC9 PCA9555 nicht erreichbar!");
-        // TODO: Fehler anzeigen / System stoppen
     } else {
         Serial.println("[OK] IC9 PCA9555 initialisiert.");
     }
 
-    /* --- CAN initialisieren ------------------------------------------
+    // ADC initialisieren (12-Bit, 11dB)
+    adc_init();
+    Serial.println("[OK] ADC initialisiert.");
+
+    // Zustandsmaschine: Safe State (alle Relais AUS, Zustand OFF)
+    sm_init();
+    Serial.println("[OK] Zustandsmaschine initialisiert.");
+
+    // CAN-Bus
     if (!can_init()) {
-        Serial.println("[FEHLER] CAN MCP2515 nicht erreichbar!");
+        Serial.println("[WARNUNG] CAN MCP2515 nicht erreichbar — CAN deaktiviert.");
     } else {
         Serial.println("[OK] CAN initialisiert.");
     }
-    */
 
-    // ----------------------------------------------------------------
-    //  Beispiele: Ausgangsfunktionen
-    // ----------------------------------------------------------------
-
-    // Netz-Relais einschalten
-    pca9555_set_grid_on(true);
-    delay(100);
-    pca9555_set_grid_on(false);
-
-    // Insel-Relais einschalten
-    pca9555_set_isle_on(true);
-    delay(100);
-    pca9555_set_isle_on(false);
-
-    // Grid/Island Umschaltung: Grid-Modus aktivieren
-    pca9555_set_gi_sel(true);   // true = Grid
-
-    // Analogkanal-Auswahl (0–3 → ASEL1/ASEL2)
-    pca9555_set_asel(0);        // Kanal 0: ASEL1=0, ASEL2=0
-    pca9555_set_asel(1);        // Kanal 1: ASEL1=1, ASEL2=0
-    pca9555_set_asel(2);        // Kanal 2: ASEL1=0, ASEL2=1
-    pca9555_set_asel(3);        // Kanal 3: ASEL1=1, ASEL2=1
-    pca9555_set_asel(0);        // zurück auf Kanal 0
-
-    // ----------------------------------------------------------------
-    //  Beispiele: direkter Lesezugriff (einmalig, z.B. Startup-Check)
-    //  Für laufende Überwachung → Interrupt-Callback nutzen (s.o.)
-    // ----------------------------------------------------------------
-    bool ntc  = pca9555_get_ntc_hot();
-    bool vg2  = pca9555_get_vg2();
-    bool vi2  = pca9555_get_vi2();
-    bool vgi  = pca9555_get_vgi();
-    bool io0  = pca9555_get_io(0);
-    bool io1  = pca9555_get_io(1);
-    bool io2  = pca9555_get_io(2);
-
-    Serial.printf("[Startup] NTC_HOT=%d  VG2=%d  VI2=%d  VGI=%d  IO=[%d,%d,%d]\n",
-                  ntc, vg2, vi2, vgi, io0, io1, io2);
-
+    // Display
     display_init();
-    g_disp.status = "Bereit";
+    Serial.println("[OK] Display initialisiert.");
+
+    Serial.println("[ACOS] Bereit. Serial-Befehle: a=Auto  g=Hand:Netz  i=Hand:Insel  o=Hand:Aus  c=Fehler_quit");
 }
 
+// ----------------------------------------------------------------
+//  Loop — 100ms Zykluszeit
+// ----------------------------------------------------------------
+static DisplayData g_disp = {};
 
 void loop() {
+    const uint32_t CYCLE_MS   = 100;
+    const uint32_t SERIAL_MS  = 2000;
+    const uint32_t CAN_TX_MS  = 1000;
+
+    static uint32_t last_serial = 0;
+    static uint32_t last_can_tx = 0;
+    uint32_t        cycle_start = millis();
+
     M5.update();
 
-    // --- PCA9555 Eingangsänderung verarbeiten -----------------------
+    // 1. Sensoren lesen
+    SensorReadings s = {};
+    read_sensors(s);
+
+    // Für Serial-Debug: PCA9555-Änderungen protokollieren
     if (g_io_updated) {
-        handle_io_change();
+        g_io_updated = false;
+        Serial.printf("[PCA9555] NTC=%d  VG2=%d  VI2=%d  VGI=%d\n",
+                      g_inputs.ntc_hot, g_inputs.vg2, g_inputs.vi2, g_inputs.vgi);
     }
 
-    // --- Display Touch auswerten ------------------------------------
+    // 2. Zustandsmaschine ticken
+    sm_tick(s, g_mode);
+    AcosState state = sm_get_state();
+
+    // 3. Touch auswerten → Modus ändern
     DispEvent evt = display_handle_touch();
     switch (evt) {
-        case DISP_EVT_TO_MANUAL:
-            g_disp.status = "Manuell";
-            Serial.println("[Display] → Manual-View");
-            break;
-        case DISP_EVT_TO_AUTO:
-            g_disp.status = "Auto";
-            Serial.println("[Display] → Auto-View");
-            break;
-        case DISP_EVT_MODE_ISLAND:
-            g_disp.status = "Modus: Island";
-            Serial.println("[Display] Modus: Island");
-            pca9555_set_isle_on(true);
-            pca9555_set_grid_on(false);
-            pca9555_set_gi_sel(false);
-            break;
-        case DISP_EVT_MODE_OFF:
-            g_disp.status = "Modus: OFF";
-            Serial.println("[Display] Modus: OFF");
-            pca9555_set_isle_on(false);
-            pca9555_set_grid_on(false);
-            break;
-        case DISP_EVT_MODE_GRID:
-            g_disp.status = "Modus: Grid";
-            Serial.println("[Display] Modus: Grid");
-            pca9555_set_grid_on(true);
-            pca9555_set_isle_on(false);
-            pca9555_set_gi_sel(true);
-            break;
-        default:
-            break;
+        case DISP_EVT_TO_MANUAL:                               break;  // nur View-Wechsel
+        case DISP_EVT_TO_AUTO:   g_mode = MODE_AUTO;          break;
+        case DISP_EVT_MODE_ISLAND: g_mode = MODE_HAND_ISLAND; break;
+        case DISP_EVT_MODE_GRID:   g_mode = MODE_HAND_GRID;   break;
+        case DISP_EVT_MODE_OFF:    g_mode = MODE_HAND_OFF;    break;
+        default: break;
     }
 
-    // --- Display aktualisieren (intern auf 100 ms gedrosselt) -------
+    // Fehler-Quittierung: beliebiger Touch wenn im ERROR-Zustand
+    if (state == STATE_ERROR) {
+        auto tp = M5.Touch.getDetail();
+        if (tp.wasPressed()) {
+            sm_clear_error();
+            g_mode = MODE_AUTO;
+            state  = sm_get_state();
+        }
+    }
+
+    // 4. CAN empfangen (Polling)
+    bool can_err_clear   = false;
+    OperatingMode can_mode = can_receive(can_err_clear);
+    if (can_mode != MODE_AUTO) {
+        g_mode = can_mode;   // CAN-Befehl überschreibt Touch-Modus
+    }
+    if (can_err_clear) {
+        sm_clear_error();
+        g_mode = MODE_AUTO;
+        state  = sm_get_state();
+    }
+
+    // 5. CAN Status senden (1Hz)
+    if (millis() - last_can_tx >= CAN_TX_MS) {
+        last_can_tx = millis();
+        uint8_t flags = (uint8_t)(
+            (s.grid_ok ? 0x01 : 0) |
+            (s.grid_ov ? 0x02 : 0) |
+            (s.load_on ? 0x04 : 0) |
+            (s.ntc_hot ? 0x08 : 0)
+        );
+        can_send_status(state, g_mode, s.soc, s.v_grid, s.v_batt, flags);
+    }
+
+    // 6. Display aktualisieren
+    char status_buf[48];
+    if (state == STATE_ERROR) {
+        snprintf(status_buf, sizeof(status_buf), "ERR: %s", sm_get_error_msg());
+    } else {
+        snprintf(status_buf, sizeof(status_buf), "%s | %s",
+                 STATE_NAMES[state], MODE_NAMES[g_mode]);
+    }
+    g_disp.status = status_buf;
+    g_disp.u_grid = s.v_grid;
+    g_disp.f_grid = 50.0f;      // TODO: Frequenzmessung noch nicht implementiert
+    g_disp.soc    = s.soc;
+    g_disp.batt_v = s.v_batt;
+
     display_update(g_disp);
+
+    // 7. Serial-Debug (alle 2s)
+    if (millis() - last_serial >= SERIAL_MS) {
+        last_serial = millis();
+        Serial.printf("[ACOS] %s | %s | SOC=%d%% | VGrid=%.1fV | VBatt=%.1fV | VLoad=%.1fV | GridOK=%d | NTC=%d\n",
+                      STATE_NAMES[state], MODE_NAMES[g_mode],
+                      s.soc, s.v_grid, s.v_batt, s.v_load,
+                      s.grid_ok, s.ntc_hot);
+    }
+
+    // 8. Serial-Befehle  (Test ohne Touch)
+    while (Serial.available()) {
+        char c = (char)Serial.read();
+        switch (c) {
+            case 'a': g_mode = MODE_AUTO;         Serial.println("[Serial] Modus: Auto");        break;
+            case 'g': g_mode = MODE_HAND_GRID;    Serial.println("[Serial] Modus: Hand:Netz");   break;
+            case 'i': g_mode = MODE_HAND_ISLAND;  Serial.println("[Serial] Modus: Hand:Insel");  break;
+            case 'o': g_mode = MODE_HAND_OFF;     Serial.println("[Serial] Modus: Hand:Aus");    break;
+            case 'c': sm_clear_error(); g_mode = MODE_AUTO;
+                      Serial.println("[Serial] Fehler quittiert");                               break;
+        }
+    }
+
+    // 9. Loop-Timing: 100ms Zykluszeit einhalten
+    uint32_t elapsed = millis() - cycle_start;
+    if (elapsed < CYCLE_MS) {
+        delay(CYCLE_MS - elapsed);
+    }
 }

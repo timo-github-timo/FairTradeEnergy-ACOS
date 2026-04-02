@@ -1,6 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
+
 // ================================================================
 //  config.h  —  Globale Konstanten, Pin-Definitionen, Enums, Structs
 //  Zielplattform: M5CoreS3SE (ESP32-S3), Stecker ST1 (IDC30)

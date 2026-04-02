@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACOS – Projektübersicht</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3350;
+    --accent: #4f8ef7;
+    --accent2: #34d399;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --island: #10b981;
+    --grid: #3b82f6;
+    --off: #6b7280;
+    --error: #ef4444;
+    --transition: #a855f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  /* NAV */
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; gap: 4px; padding: 8px 20px; position: sticky; top: 0; z-index: 100; flex-wrap: wrap; }
+  nav button { background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--muted); cursor: pointer; padding: 6px 14px; font-size: 13px; transition: all .2s; }
+  nav button:hover, nav button.active { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+  nav .title { color: var(--accent); font-weight: 700; font-size: 15px; padding: 6px 14px 6px 0; border-right: 1px solid var(--border); margin-right: 8px; }
+
+  /* SECTIONS */
+  .section { display: none; padding: 24px 20px; max-width: 1200px; margin: 0 auto; }
+  .section.active { display: block; }
+
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 20px; color: var(--accent); display: flex; align-items: center; gap: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 10px; color: var(--text); }
+
+  /* CARDS */
+  .grid { display: grid; gap: 14px; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card-title { font-weight: 600; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+  .card-val { font-size: 22px; font-weight: 700; }
+
+  /* FILE TREE */
+  .tree { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; font-family: monospace; font-size: 13px; line-height: 1.8; }
+  .tree .dir { color: var(--accent); font-weight: 600; }
+  .tree .file { color: var(--text); }
+  .tree .comment { color: var(--muted); }
+  .tree .badge { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; font-size: 11px; padding: 1px 6px; margin-left: 8px; color: var(--accent2); vertical-align: middle; }
+  .tree .badge-warn { color: var(--warn); border-color: var(--warn); }
+
+  /* STATE MACHINE */
+  .sm-container { position: relative; }
+  .states { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-bottom: 24px; }
+  .state-card { border-radius: 12px; padding: 16px 20px; text-align: center; cursor: pointer; transition: transform .2s, box-shadow .2s; border: 2px solid transparent; min-width: 140px; }
+  .state-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .state-card.selected { border-color: white; }
+  .state-island { background: linear-gradient(135deg, #065f46, #10b981); }
+  .state-grid { background: linear-gradient(135deg, #1e3a8a, #3b82f6); }
+  .state-off { background: linear-gradient(135deg, #374151, #6b7280); }
+  .state-error { background: linear-gradient(135deg, #7f1d1d, #ef4444); }
+  .state-trans { background: linear-gradient(135deg, #4c1d95, #a855f7); }
+  .state-label { font-weight: 700; font-size: 14px; }
+  .state-sub { font-size: 11px; opacity: .8; margin-top: 4px; }
+
+  .detail-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-height: 80px; }
+  .detail-box p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+  /* FLOW ARROWS */
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; font-size: 12px; }
+  .flow-node { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
+  .flow-arrow { color: var(--muted); font-size: 16px; }
+  .flow-cond { color: var(--warn); font-size: 11px; font-style: italic; }
+
+  /* CONFIG TABLE */
+  .config-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .config-table th { background: var(--surface2); color: var(--muted); text-align: left; padding: 8px 12px; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .config-table td { padding: 8px 12px; border-top: 1px solid var(--border); vertical-align: top; }
+  .config-table tr:hover td { background: var(--surface2); }
+  .mono { font-family: monospace; color: var(--accent2); }
+  .tag-ok { background: #052e16; color: var(--accent2); border: 1px solid #16a34a; border-radius: 4px; padding: 1px 7px; font-size: 11px; }
+  .tag-warn { background: #451a03; color: var(--warn); border: 1px solid var(--warn); border-radius: 4px; padding: 1px 7px; font-size: 11px; }
+  .tag-crit { background: #450a0a; color: var(--danger); border: 1px solid var(--danger); border-radius: 4px; padding: 1px 7px; font-size: 11px; }
+
+  /* CODE BLOCK */
+  pre { background: #0a0c14; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-family: monospace; font-size: 12px; line-height: 1.7; overflow-x: auto; color: #c9d1d9; }
+  .kw { color: #ff7b72; }
+  .cm { color: #6e7681; font-style: italic; }
+  .str { color: #a5d6ff; }
+  .num { color: #79c0ff; }
+  .fn { color: #d2a8ff; }
+  .mac { color: #ffa657; }
+
+  /* CAN PROTOCOL */
+  .can-frame { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .can-header { background: var(--surface2); padding: 10px 16px; font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
+  .can-id { background: var(--accent); color: #fff; border-radius: 4px; padding: 2px 8px; font-family: monospace; font-size: 12px; }
+  .can-bytes { display: flex; gap: 4px; padding: 14px 16px; flex-wrap: wrap; }
+  .can-byte { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; text-align: center; min-width: 60px; }
+  .can-byte .idx { color: var(--muted); font-size: 10px; margin-bottom: 2px; }
+  .can-byte .val { font-family: monospace; font-size: 12px; color: var(--accent2); }
+  .can-byte .desc { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* CHECKLIST */
+  .checklist { list-style: none; display: grid; gap: 8px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; cursor: pointer; transition: background .15s; }
+  .checklist li:hover { background: var(--surface2); }
+  .checklist li.done { opacity: .5; }
+  .checklist li.done .check { background: var(--accent2); border-color: var(--accent2); }
+  .checklist li.done .check::after { content: '✓'; }
+  .check { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; margin-top: 1px; }
+  .check-text { flex: 1; font-size: 13px; line-height: 1.5; }
+  .check-badge { font-size: 11px; flex-shrink: 0; margin-top: 2px; }
+
+  /* UI MOCKUP */
+  .mockup { background: #111; border-radius: 12px; border: 2px solid #333; padding: 0; overflow: hidden; max-width: 480px; margin: 0 auto; }
+  .mockup-screen { background: #1a1a2e; padding: 0; }
+  .mockup-topbar { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0; border-bottom: 1px solid #333; }
+  .mockup-tile { padding: 8px; text-align: center; border-right: 1px solid #333; }
+  .mockup-tile:last-child { border-right: none; }
+  .mockup-tile .mt-label { font-size: 9px; color: #6b7280; text-transform: uppercase; }
+  .mockup-tile .mt-val { font-size: 15px; font-weight: 700; color: #e2e8f0; }
+  .mockup-tile .mt-unit { font-size: 9px; color: #6b7280; }
+  .mockup-main { padding: 16px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+  .mockup-status { background: #0f1117; border-top: 1px solid #333; padding: 8px 12px; font-size: 11px; color: #6b7280; display: flex; justify-content: space-between; }
+  .mode-btn { background: #22263a; border: 1px solid #4f8ef7; border-radius: 8px; padding: 8px 20px; color: #4f8ef7; font-size: 12px; cursor: pointer; }
+  .manual-cards { display: flex; gap: 8px; }
+  .m-card { border-radius: 8px; padding: 10px 14px; text-align: center; font-size: 11px; font-weight: 700; cursor: pointer; border: 2px solid transparent; }
+  .m-card.active { border-color: white; }
+  .m-card-isle { background: linear-gradient(135deg, #065f46, #10b981); }
+  .m-card-off { background: linear-gradient(135deg, #374151, #6b7280); }
+  .m-card-grid { background: linear-gradient(135deg, #1e3a8a, #3b82f6); }
+
+  /* TOGGLE VIEW BUTTON */
+  .view-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .view-toggle button { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); cursor: pointer; padding: 5px 14px; font-size: 12px; }
+  .view-toggle button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .hidden { display: none; }
+  .badge-new { background: var(--danger); color: #fff; border-radius: 10px; font-size: 10px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="title">ACOS</span>
+  <button class="active" onclick="show('struktur')">Struktur</button>
+  <button onclick="show('statemachine')">State Machine</button>
+  <button onclick="show('config')">Konfiguration <span class="badge-new">live</span></button>
+  <button onclick="show('can')">CAN-Protokoll</button>
+  <button onclick="show('snippets')">Code-Snippets</button>
+  <button onclick="show('display')">Display-UI</button>
+  <button onclick="show('checklist')">Deployment ✓</button>
+</nav>
+
+<!-- ======================== STRUKTUR ======================== -->
+<div id="struktur" class="section active">
+  <h2>Projektstruktur</h2>
+
+  <div class="grid grid-3" style="margin-bottom:20px">
+    <div class="card">
+      <div class="card-title">Plattform</div>
+      <div class="card-val" style="font-size:16px">M5CoreS3SE</div>
+      <div style="color:var(--muted);margin-top:6px;font-size:12px">ESP32-S3 · 320×240 Touch · 8MB Flash</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Framework</div>
+      <div class="card-val" style="font-size:16px">Arduino / PlatformIO</div>
+      <div style="color:var(--muted);margin-top:6px;font-size:12px">Hauptzyklus 100 ms · FreeRTOS</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Interfaces</div>
+      <div class="card-val" style="font-size:16px">CAN · I²C · ADC</div>
+      <div style="color:var(--muted);margin-top:6px;font-size:12px">MCP2515 · PCA9555 · 12-bit ADC</div>
+    </div>
+  </div>
+
+  <div class="tree">
+    <div><span class="dir">FairTradeEnergy-ACOS/</span></div>
+    <div>&nbsp;&nbsp;├── <span class="file">platformio.ini</span> <span class="comment">  # Board, Libs, Build-Flags</span></div>
+    <div>&nbsp;&nbsp;├── <span class="file">include/</span></div>
+    <div>&nbsp;&nbsp;│&nbsp;&nbsp; └── <span class="file">config.h</span> <span class="badge badge-warn">⚠ kalibrieren</span> <span class="comment">  # Pins, Schwellwerte, Konstanten</span></div>
+    <div>&nbsp;&nbsp;└── <span class="file">src/</span></div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├── <span class="file">ACOS.cpp</span> <span class="comment">  # setup() + loop() – Haupteinstiegspunkt</span></div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├── <span class="file">state_machine.h/cpp</span> <span class="badge">Kern-Logik</span> <span class="comment">  # Zustandsautomat + Sicherheit</span></div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├── <span class="file">adc_reader.h/cpp</span> <span class="comment">  # Spannungsmessung + SOC-Berechnung</span></div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├── <span class="file">can_module.h/cpp</span> <span class="comment">  # CAN-Bus TX/RX (MCP2515 SPI)</span></div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ├── <span class="file">display_module.h/cpp</span> <span class="comment">  # Touch-UI 320×240</span></div>
+    <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; └── <span class="file">pca9555_module.h/cpp</span> <span class="comment">  # I²C I/O-Expander (Relais, Mux)</span></div>
+  </div>
+
+  <h3>Datenfluss</h3>
+  <div class="flow" style="flex-direction:column;align-items:flex-start;gap:6px">
+    <div class="flow"><span class="flow-node">ADC (Spannungen)</span><span class="flow-arrow">→</span><span class="flow-node">adc_reader</span><span class="flow-arrow">→</span><span class="flow-node">SOC + Volt-Werte</span></div>
+    <div class="flow"><span class="flow-node">PCA9555 GPIO (Optos)</span><span class="flow-arrow">→</span><span class="flow-node">pca9555_module</span><span class="flow-arrow">→</span><span class="flow-node">grid_ok / load_on / ntc_hot</span></div>
+    <div class="flow"><span class="flow-node">CAN-Bus RX</span><span class="flow-arrow">→</span><span class="flow-node">can_module</span><span class="flow-arrow">→</span><span class="flow-node">Modus-Befehl</span></div>
+    <div class="flow"><span class="flow-node">Alle Signale</span><span class="flow-arrow">→</span><span class="flow-node" style="border-color:var(--accent);color:var(--accent)">state_machine</span><span class="flow-arrow">→</span><span class="flow-node">Relais schalten</span></div>
+    <div class="flow"><span class="flow-node">Zustand + Messwerte</span><span class="flow-arrow">→</span><span class="flow-node">display_module</span><span class="flow-arrow">→</span><span class="flow-node">Touch-UI</span></div>
+    <div class="flow"><span class="flow-node">Zustand + Messwerte</span><span class="flow-arrow">→</span><span class="flow-node">can_module TX</span><span class="flow-arrow">→</span><span class="flow-node">CAN-Bus (1 Hz)</span></div>
+  </div>
+
+  <h3>Bibliotheken</h3>
+  <div class="grid grid-3">
+    <div class="card"><div class="card-title">M5Unified</div><div style="font-family:monospace;font-size:12px;color:var(--accent2)">0.1.17</div><div style="color:var(--muted);font-size:12px;margin-top:4px">Display, Touch, Hardware-Abstraktion</div></div>
+    <div class="card"><div class="card-title">PCA9555 (nicoverduin)</div><div style="font-family:monospace;font-size:12px;color:var(--accent2)">v1.0.0</div><div style="color:var(--muted);font-size:12px;margin-top:4px">I²C I/O-Expander-Treiber</div></div>
+    <div class="card"><div class="card-title">arduino-mcp2515</div><div style="font-family:monospace;font-size:12px;color:var(--accent2)">v1.1.0</div><div style="color:var(--muted);font-size:12px;margin-top:4px">CAN-Controller (autowp)</div></div>
+  </div>
+</div>
+
+<!-- ======================== STATE MACHINE ======================== -->
+<div id="statemachine" class="section">
+  <h2>Zustandsautomat</h2>
+
+  <div class="states">
+    <div class="state-card state-off" onclick="selectState('off')">
+      <div class="state-label">STATE_OFF</div>
+      <div class="state-sub">Verbraucher getrennt</div>
+    </div>
+    <div class="state-card state-island" onclick="selectState('island')">
+      <div class="state-label">STATE_ISLAND</div>
+      <div class="state-sub">Batteriebetrieb aktiv</div>
+    </div>
+    <div class="state-card state-grid" onclick="selectState('grid')">
+      <div class="state-label">STATE_GRID</div>
+      <div class="state-sub">Netzbetrieb aktiv</div>
+    </div>
+    <div class="state-card state-trans" onclick="selectState('t_grid')">
+      <div class="state-label">→ GRID</div>
+      <div class="state-sub">Übergang zu Netz</div>
+    </div>
+    <div class="state-card state-trans" onclick="selectState('t_island')">
+      <div class="state-label">→ ISLAND</div>
+      <div class="state-sub">Übergang zu Insel</div>
+    </div>
+    <div class="state-card state-error" onclick="selectState('error')">
+      <div class="state-label">STATE_ERROR</div>
+      <div class="state-sub">Sicherheitsabschaltung</div>
+    </div>
+  </div>
+
+  <div class="detail-box" id="state-detail">
+    <p style="color:var(--muted);text-align:center;margin-top:16px">← Zustand anklicken für Details</p>
+  </div>
+
+  <h3 style="margin-top:24px">Globale Sicherheitslogik (überschreibt alles)</h3>
+  <pre><span class="kw">if</span> (s.ntc_hot)  { <span class="fn">set_error</span>(<span class="str">"Uebertemperatur"</span>);   <span class="kw">return</span>; }  <span class="cm">// Übertemperatur → sofort ERROR</span>
+<span class="kw">if</span> (s.grid_ov)  { <span class="fn">set_error</span>(<span class="str">"Netz-Ueberspannung"</span>); <span class="kw">return</span>; }  <span class="cm">// Überspannung → sofort ERROR</span></pre>
+
+  <h3>Break-before-Make Sequenz</h3>
+  <div class="flow">
+    <span class="flow-node">Beide Relais AUS</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-node">Warten bis V_Load &lt; 50V</span>
+    <span class="flow-cond">(max 3 s)</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-node">GI_SEL umschalten</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-node">Neues Relais EIN</span>
+  </div>
+</div>
+
+<!-- ======================== KONFIGURATION ======================== -->
+<div id="config" class="section">
+  <h2>Konfiguration – Live-Parameter</h2>
+
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button onclick="filterConfig('all')" id="f-all" style="background:var(--accent);border:none;border-radius:6px;color:#fff;cursor:pointer;padding:5px 14px;font-size:12px">Alle</button>
+    <button onclick="filterConfig('crit')" id="f-crit" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:5px 14px;font-size:12px">Kritisch</button>
+    <button onclick="filterConfig('warn')" id="f-warn" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:5px 14px;font-size:12px">Prüfen</button>
+    <button onclick="filterConfig('ok')" id="f-ok" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:5px 14px;font-size:12px">OK</button>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <table class="config-table" id="config-table">
+      <thead><tr><th>Define</th><th>Datei</th><th>Wert</th><th>Beschreibung</th><th>Status</th></tr></thead>
+      <tbody>
+        <!-- PINS -->
+        <tr data-status="warn"><td class="mono">PIN_CAN_CS</td><td class="mono">config.h</td><td class="mono">38</td><td>CAN Chip-Select Pin</td><td><span class="tag-warn">TODO Pinout</span></td></tr>
+        <tr data-status="warn"><td class="mono">PIN_CAN_INT</td><td class="mono">config.h</td><td class="mono">45</td><td>CAN Interrupt Pin</td><td><span class="tag-warn">TODO Pinout</span></td></tr>
+        <tr data-status="warn"><td class="mono">PIN_RS485_WR</td><td class="mono">config.h</td><td class="mono">46</td><td>RS485 Write-Enable</td><td><span class="tag-warn">TODO Pinout</span></td></tr>
+        <tr data-status="ok"><td class="mono">PIN_I2C_SDA</td><td class="mono">config.h</td><td class="mono">12</td><td>I²C Datenleitung</td><td><span class="tag-ok">OK</span></td></tr>
+        <tr data-status="ok"><td class="mono">PIN_I2C_SCL</td><td class="mono">config.h</td><td class="mono">11</td><td>I²C Taktleitung</td><td><span class="tag-ok">OK</span></td></tr>
+        <tr data-status="ok"><td class="mono">PIN_ADC</td><td class="mono">config.h</td><td class="mono">10</td><td>ADC Eingang</td><td><span class="tag-ok">OK</span></td></tr>
+        <tr data-status="ok"><td class="mono">PIN_nVGRID</td><td class="mono">config.h</td><td class="mono">7</td><td>Netz-Spannung vorhanden (aktiv LOW)</td><td><span class="tag-ok">OK</span></td></tr>
+        <tr data-status="ok"><td class="mono">PIN_nVLOAD</td><td class="mono">config.h</td><td class="mono">8</td><td>Last-Spannung vorhanden (aktiv LOW)</td><td><span class="tag-ok">OK</span></td></tr>
+        <!-- ADC -->
+        <tr data-status="crit"><td class="mono">ADC_GRID_SCALE</td><td class="mono">config.h</td><td class="mono">150.0f</td><td>Skalierungsfaktor Netzspannung</td><td><span class="tag-crit">Kalibrieren!</span></td></tr>
+        <tr data-status="warn"><td class="mono">ADC_BATT_DIVIDER</td><td class="mono">config.h</td><td class="mono">101.0f</td><td>R59/R60 Spannungsteiler Batterie</td><td><span class="tag-warn">Prüfen</span></td></tr>
+        <tr data-status="ok"><td class="mono">ADC_OVERSAMPLING</td><td class="mono">config.h</td><td class="mono">16</td><td>Samples pro Messung</td><td><span class="tag-ok">OK</span></td></tr>
+        <tr data-status="ok"><td class="mono">ADC_SETTLING_US</td><td class="mono">config.h</td><td class="mono">100</td><td>Einschwingzeit nach Mux-Umschaltung [µs]</td><td><span class="tag-ok">OK</span></td></tr>
+        <!-- SOC -->
+        <tr data-status="warn"><td class="mono">THR_SOC_EMERGENCY</td><td class="mono">config.h</td><td class="mono">5%</td><td>Notabschaltung unter diesem SOC</td><td><span class="tag-warn">Prüfen</span></td></tr>
+        <tr data-status="warn"><td class="mono">THR_SOC_MIN</td><td class="mono">config.h</td><td class="mono">15%</td><td>Untergrenze → Grid bevorzugen</td><td><span class="tag-warn">Prüfen</span></td></tr>
+        <tr data-status="warn"><td class="mono">THR_SOC_MAX</td><td class="mono">config.h</td><td class="mono">95%</td><td>Obergrenze → Insel bevorzugen</td><td><span class="tag-warn">Prüfen</span></td></tr>
+        <tr data-status="ok"><td class="mono">THR_SWITCH_V</td><td class="mono">config.h</td><td class="mono">50.0 V</td><td>Verbraucher gilt als "aus"</td><td><span class="tag-ok">OK</span></td></tr>
+        <tr data-status="ok"><td class="mono">TIMEOUT_RELAY_MS</td><td class="mono">config.h</td><td class="mono">3000 ms</td><td>Max. Wartezeit Relaisumschaltung</td><td><span class="tag-ok">OK</span></td></tr>
+        <!-- CAN -->
+        <tr data-status="warn"><td class="mono">CAN Oszillator</td><td class="mono">can_module.cpp</td><td class="mono">MCP_8MHZ</td><td>Quarzfrequenz des MCP2515</td><td><span class="tag-warn">Quarz prüfen</span></td></tr>
+        <tr data-status="warn"><td class="mono">CAN_ID_STATUS</td><td class="mono">can_module.cpp</td><td class="mono">0x101</td><td>TX-Frame ID</td><td><span class="tag-warn">Konflikt prüfen</span></td></tr>
+        <tr data-status="warn"><td class="mono">CAN_ID_COMMAND</td><td class="mono">can_module.cpp</td><td class="mono">0x201</td><td>RX-Frame ID</td><td><span class="tag-warn">Konflikt prüfen</span></td></tr>
+        <!-- I2C -->
+        <tr data-status="warn"><td class="mono">PCA9555_I2C_ADDR</td><td class="mono">config.h</td><td class="mono">0x27</td><td>I²C-Adresse (A0=A1=A2=HIGH)</td><td><span class="tag-warn">Bestückung prüfen</span></td></tr>
+        <!-- Timing -->
+        <tr data-status="ok"><td class="mono">CYCLE_MS</td><td class="mono">ACOS.cpp</td><td class="mono">100 ms</td><td>Hauptzyklus</td><td><span class="tag-ok">OK</span></td></tr>
+        <tr data-status="ok"><td class="mono">CAN_TX_MS</td><td class="mono">ACOS.cpp</td><td class="mono">1000 ms</td><td>CAN Status-Telegramm Intervall</td><td><span class="tag-ok">OK</span></td></tr>
+        <!-- Battery LUT -->
+        <tr data-status="warn"><td class="mono">LUT_V / LUT_SOC</td><td class="mono">adc_reader.cpp</td><td class="mono">LiFePO4 16S</td><td>Spannungs-SOC-Kennlinie</td><td><span class="tag-warn">Chemie prüfen</span></td></tr>
+        <tr data-status="ok"><td class="mono">EMA_ALPHA</td><td class="mono">adc_reader.cpp</td><td class="mono">0.1f</td><td>EMA-Filterkoeffizient</td><td><span class="tag-ok">OK</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ======================== CAN ======================== -->
+<div id="can" class="section">
+  <h2>CAN-Bus Protokoll</h2>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+    <div class="card" style="flex:1;min-width:200px">
+      <div class="card-title">Bitrate</div>
+      <div class="card-val">500 kbps</div>
+    </div>
+    <div class="card" style="flex:1;min-width:200px">
+      <div class="card-title">Oszillator MCP2515</div>
+      <div class="card-val" style="color:var(--warn)">8 MHz <small style="font-size:12px">⚠</small></div>
+    </div>
+    <div class="card" style="flex:1;min-width:200px">
+      <div class="card-title">TX-Intervall</div>
+      <div class="card-val">1 Hz</div>
+    </div>
+  </div>
+
+  <h3>Status-Frame TX (ACOS → Bus)</h3>
+  <div class="can-frame" style="margin-bottom:16px">
+    <div class="can-header">
+      Status TX <span class="can-id">ID 0x101</span>
+    </div>
+    <div class="can-bytes">
+      <div class="can-byte"><div class="idx">Byte 0</div><div class="val">State</div><div class="desc">0=OFF … 5=ERR</div></div>
+      <div class="can-byte"><div class="idx">Byte 1</div><div class="val">Mode</div><div class="desc">0=AUTO … 3=OFF</div></div>
+      <div class="can-byte"><div class="idx">Byte 2</div><div class="val">SOC %</div><div class="desc">0–100</div></div>
+      <div class="can-byte"><div class="idx">Byte 3–4</div><div class="val">U_Grid</div><div class="desc">uint16 BE ×10</div></div>
+      <div class="can-byte"><div class="idx">Byte 5–6</div><div class="val">U_Batt</div><div class="desc">uint16 BE ×10</div></div>
+      <div class="can-byte"><div class="idx">Byte 7</div><div class="val">Flags</div><div class="desc">bit0=grd_ok<br>bit1=grd_ov<br>bit2=load_on<br>bit3=ntc_hot</div></div>
+    </div>
+  </div>
+
+  <h3>Kommando-Frame RX (Bus → ACOS)</h3>
+  <div class="can-frame">
+    <div class="can-header">
+      Kommando RX <span class="can-id" style="background:var(--transition)">ID 0x201</span>
+    </div>
+    <div class="can-bytes">
+      <div class="can-byte"><div class="idx">0x00</div><div class="val">AUTO</div><div class="desc">Automatik</div></div>
+      <div class="can-byte"><div class="idx">0x01</div><div class="val">GRID</div><div class="desc">Manuell Netz</div></div>
+      <div class="can-byte"><div class="idx">0x02</div><div class="val">ISLE</div><div class="desc">Manuell Insel</div></div>
+      <div class="can-byte"><div class="idx">0x03</div><div class="val">OFF</div><div class="desc">Manuell Aus</div></div>
+      <div class="can-byte"><div class="idx">0x04</div><div class="val">CLR</div><div class="desc">Fehler quit.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================== SNIPPETS ======================== -->
+<div id="snippets" class="section">
+  <h2>Kern-Code-Snippets</h2>
+
+  <h3>Hauptzyklus (ACOS.cpp)</h3>
+  <pre><span class="kw">void</span> <span class="fn">loop</span>() {
+    <span class="fn">adc_reader_update</span>();     <span class="cm">// Spannungen + SOC lesen</span>
+    <span class="fn">state_machine_update</span>(); <span class="cm">// Zustände + Relais</span>
+    <span class="fn">display_module_update</span>(); <span class="cm">// Touch-UI</span>
+    <span class="kw">if</span> (elapsed >= CAN_TX_MS) <span class="fn">can_module_tx</span>();  <span class="cm">// CAN alle 1 s</span>
+}</pre>
+
+  <h3>Spannungsmessung mit Oversampling (adc_reader.cpp)</h3>
+  <pre><span class="kw">static float</span> <span class="fn">read_channel</span>(<span class="kw">uint8_t</span> channel) {
+    <span class="fn">pca9555_set_asel</span>(channel);           <span class="cm">// Multiplexer umschalten</span>
+    <span class="fn">delayMicroseconds</span>(<span class="mac">ADC_SETTLING_US</span>); <span class="cm">// 100 µs Einschwingen</span>
+    <span class="kw">uint32_t</span> sum = <span class="num">0</span>;
+    <span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i < <span class="mac">ADC_OVERSAMPLING</span>; i++)  <span class="cm">// 16 Samples</span>
+        sum += <span class="fn">analogRead</span>(<span class="mac">PIN_ADC</span>);
+    <span class="kw">return</span> ((<span class="kw">float</span>)sum / <span class="mac">ADC_OVERSAMPLING</span>) * (<span class="mac">ADC_VREF</span> / <span class="mac">ADC_RESOLUTION</span>);
+}
+<span class="cm">// SOC: LUT-Interpolation + EMA-Filter (α = 0.1)</span></pre>
+
+  <h3>Interrupt-sicheres I²C (pca9555_module.cpp)</h3>
+  <pre><span class="cm">// ISR – nur Signal geben, kein I²C:</span>
+<span class="kw">static void</span> IRAM_ATTR <span class="fn">pca9555_isr</span>() {
+    BaseType_t woken = pdFALSE;
+    <span class="fn">xSemaphoreGiveFromISR</span>(_irq_sem, &woken);
+    <span class="fn">portYIELD_FROM_ISR</span>(woken);
+}
+<span class="cm">// FreeRTOS-Task erledigt I²C-Kommunikation thread-safe:</span>
+<span class="kw">static void</span> <span class="fn">pca9555_irq_task</span>(<span class="kw">void</span>* arg) {
+    <span class="kw">for</span> (;;) {
+        <span class="fn">xSemaphoreTake</span>(_irq_sem, portMAX_DELAY);   <span class="cm">// warten</span>
+        <span class="fn">xSemaphoreTake</span>(_wire_mutex, portMAX_DELAY); <span class="cm">// I²C sperren</span>
+        <span class="cm">// Ports lesen, dekodieren, Callback aufrufen</span>
+        <span class="fn">xSemaphoreGive</span>(_wire_mutex);
+    }
+}</pre>
+
+  <h3>Automatik STATE_OFF → Übergang (state_machine.cpp)</h3>
+  <pre><span class="kw">case</span> STATE_OFF:
+    <span class="kw">if</span> (mode == MODE_AUTO) {
+        <span class="kw">if</span> (s.soc >= <span class="mac">THR_SOC_MIN</span> && !s.grid_ok && s.v_load < <span class="mac">THR_SWITCH_V</span>)
+            <span class="fn">enter_state</span>(STATE_TRANSITION_TO_ISLAND); <span class="cm">// Batterie ok, kein Netz</span>
+        <span class="kw">else if</span> (s.soc < <span class="mac">THR_SOC_MAX</span> && s.grid_ok && s.v_load < <span class="mac">THR_SWITCH_V</span>)
+            <span class="fn">enter_state</span>(STATE_TRANSITION_TO_GRID);   <span class="cm">// Netz ok, Bat. nicht voll</span>
+    }
+    <span class="kw">break</span>;</pre>
+</div>
+
+<!-- ======================== DISPLAY ======================== -->
+<div id="display" class="section">
+  <h2>Display-UI (320×240 Touchscreen)</h2>
+
+  <div class="view-toggle">
+    <button class="active" id="btn-auto" onclick="switchView('auto')">AUTO-Ansicht</button>
+    <button id="btn-manual" onclick="switchView('manual')">MANUAL-Ansicht</button>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-screen">
+      <div class="mockup-topbar">
+        <div class="mockup-tile">
+          <div class="mt-label">U_grid</div>
+          <div class="mt-val">230</div>
+          <div class="mt-unit">V</div>
+        </div>
+        <div class="mockup-tile">
+          <div class="mt-label">F_grid</div>
+          <div class="mt-val">50</div>
+          <div class="mt-unit">Hz</div>
+        </div>
+        <div class="mockup-tile">
+          <div class="mt-label">SOC</div>
+          <div class="mt-val">73</div>
+          <div class="mt-unit">%</div>
+        </div>
+        <div class="mockup-tile">
+          <div class="mt-label">U_batt</div>
+          <div class="mt-val">51.4</div>
+          <div class="mt-unit">V</div>
+        </div>
+      </div>
+
+      <div class="mockup-main" id="mockup-main-auto">
+        <div style="color:#10b981;font-weight:700;font-size:18px">ISLAND</div>
+        <div style="color:#6b7280;font-size:11px">Batteriebetrieb aktiv</div>
+        <button class="mode-btn" onclick="switchView('manual')">Manuell →</button>
+      </div>
+
+      <div class="mockup-main hidden" id="mockup-main-manual">
+        <div class="manual-cards">
+          <div class="m-card m-card-isle active" onclick="selectManual(this)">INSEL</div>
+          <div class="m-card m-card-off" onclick="selectManual(this)">AUS</div>
+          <div class="m-card m-card-grid" onclick="selectManual(this)">NETZ</div>
+        </div>
+        <button class="mode-btn" onclick="switchView('auto')">← Auto</button>
+      </div>
+
+      <div class="mockup-status">
+        <span>Status: ISLAND</span>
+        <span>Modus: AUTO</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;color:var(--muted);font-size:12px;text-align:center">
+    Klick auf Karten und Buttons ist interaktiv ↑
+  </div>
+
+  <h3>Layout-Beschreibung</h3>
+  <div class="card">
+    <p style="font-size:13px;line-height:1.8;color:var(--muted)">
+      <strong style="color:var(--text)">Statusleiste oben:</strong> U_grid [V] · F_grid [Hz] · SOC [%] · U_batt [V]<br>
+      <strong style="color:var(--text)">Hauptbereich:</strong> AUTO-Ansicht (aktueller Zustand + Schaltfläche "Manuell") oder MANUAL-Ansicht (3 wählbare Karten: Insel / Aus / Netz)<br>
+      <strong style="color:var(--text)">Fußzeile:</strong> Aktueller Zustand | Betriebsmodus
+    </p>
+  </div>
+</div>
+
+<!-- ======================== CHECKLIST ======================== -->
+<div id="checklist" class="section">
+  <h2>Deployment-Checkliste</h2>
+
+  <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+    <div class="card" style="flex:1;min-width:140px;text-align:center">
+      <div class="card-title">Gesamt</div>
+      <div class="card-val" id="total-count">11</div>
+    </div>
+    <div class="card" style="flex:1;min-width:140px;text-align:center">
+      <div class="card-title">Erledigt</div>
+      <div class="card-val" id="done-count" style="color:var(--accent2)">0</div>
+    </div>
+    <div class="card" style="flex:1;min-width:140px;text-align:center">
+      <div class="card-title">Fortschritt</div>
+      <div class="card-val" id="progress-pct">0%</div>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);border-radius:8px;height:8px;overflow:hidden;margin-bottom:20px">
+    <div id="progress-bar" style="height:100%;background:var(--accent2);width:0%;transition:width .3s"></div>
+  </div>
+
+  <ul class="checklist" id="checklist-items">
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>Pins verifiziert</strong> – CAN_CS (38), CAN_INT (45), RS485_WR (46) gegen PCB-Schaltplan und M5CoreS3SE-Pinout prüfen</div><span class="check-badge"><span class="tag-crit">Kritisch</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>ADC_GRID_SCALE kalibriert</strong> – aktuell 150.0 (Platzhalter!) – bekannte Spannung anlegen, Wert anpassen</div><span class="check-badge"><span class="tag-crit">Kritisch</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>ADC_BATT_DIVIDER geprüft</strong> – R59 (10 MΩ) + R60 (100 kΩ) gegen Bestückungsplan</div><span class="check-badge"><span class="tag-warn">Prüfen</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>Batteriechemie bestätigt</strong> – LUT für LiFePO4 16S ausgelegt; bei anderer Chemie/Zellzahl anpassen</div><span class="check-badge"><span class="tag-warn">Prüfen</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>CAN-Oszillator korrekt</strong> – MCP2515 mit 8 MHz Quarz? Sonst MCP_8MHZ → MCP_16MHZ in can_module.cpp</div><span class="check-badge"><span class="tag-warn">Prüfen</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>CAN-IDs auf Konflikte geprüft</strong> – 0x101 (TX) und 0x201 (RX) dürfen nicht von anderen Knoten belegt sein</div><span class="check-badge"><span class="tag-warn">Prüfen</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>PCA9555 I²C-Adresse</strong> – 0x27 (A0=A1=A2=HIGH) gegen Bestückungsplan verifiziert</div><span class="check-badge"><span class="tag-warn">Prüfen</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>SOC-Schwellwerte angepasst</strong> – THR_SOC_EMERGENCY=5%, THR_SOC_MIN=15%, THR_SOC_MAX=95% ans System anpassen</div><span class="check-badge"><span class="tag-warn">Prüfen</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>Break-before-Make getestet</strong> – Relaissequenz im Lasttest unter echten Bedingungen bestätigt</div><span class="check-badge"><span class="tag-crit">Kritisch</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>Schutzfunktionen getestet</strong> – Übertemperatur- und Überspannungsabschaltung ausgelöst und bestätigt</div><span class="check-badge"><span class="tag-crit">Kritisch</span></span></li>
+    <li onclick="toggleCheck(this)"><div class="check"></div><div class="check-text"><strong>APP_VERSION gesetzt</strong> – platformio.ini: -DAPP_VERSION="dev" → Release-Version eintragen</div><span class="check-badge"><span class="tag-ok">Info</span></span></li>
+  </ul>
+</div>
+
+<script>
+// NAV
+function show(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+// STATE MACHINE
+const stateDetails = {
+  off: { title: 'STATE_OFF', desc: 'Verbraucher vollständig getrennt. Im AUTO-Modus: Wechselt zu ISLAND wenn SOC ≥ 15% und kein Netz, oder zu GRID wenn Netz ok und SOC &lt; 95%. Im HAND-Modus: Verbleibt bis manueller Befehl.' },
+  island: { title: 'STATE_ISLAND', desc: 'Batteriebetrieb aktiv. Im AUTO-Modus: Wechselt zu TRANSITION_TO_GRID wenn SOC &lt; 15% und Netz verfügbar. Bleibt auf Insel solange SOC ≥ 15% oder kein Netz.' },
+  grid: { title: 'STATE_GRID', desc: 'Netzbetrieb aktiv. Im AUTO-Modus: Wechselt zu TRANSITION_TO_ISLAND wenn SOC ≥ 95% oder Netz ausfällt und SOC ≥ 15%.' },
+  t_grid: { title: 'STATE_TRANSITION_TO_GRID', desc: 'Break-before-Make: 1) Beide Relais AUS → 2) Warten bis V_Load &lt; 50V (max. 3s) → 3) GI_SEL = Grid → 4) Grid-Relais EIN → Weiter zu STATE_GRID.' },
+  t_island: { title: 'STATE_TRANSITION_TO_ISLAND', desc: 'Break-before-Make: 1) Beide Relais AUS → 2) Warten bis V_Load &lt; 50V (max. 3s) → 3) GI_SEL = Island → 4) Island-Relais EIN → Weiter zu STATE_ISLAND.' },
+  error: { title: 'STATE_ERROR', desc: 'Sicherheitsabschaltung: Alle Relais AUS. Wird durch Übertemperatur (NTC) oder Netz-Überspannung ausgelöst. Quittierung nur per CAN-Kommando 0x04 oder Touch.' }
+};
+function selectState(key) {
+  const d = stateDetails[key];
+  document.getElementById('state-detail').innerHTML = `<p><strong style="color:var(--text);font-size:14px">${d.title}</strong><br><br>${d.desc}</p>`;
+  document.querySelectorAll('.state-card').forEach(c => c.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+}
+
+// CONFIG FILTER
+function filterConfig(type) {
+  const rows = document.querySelectorAll('#config-table tbody tr');
+  rows.forEach(r => {
+    if (type === 'all') r.style.display = '';
+    else r.style.display = r.dataset.status === type ? '' : 'none';
+  });
+  ['all','crit','warn','ok'].forEach(t => {
+    const btn = document.getElementById('f-'+t);
+    if (btn) {
+      btn.style.background = t === type ? 'var(--accent)' : 'var(--surface2)';
+      btn.style.color = t === type ? '#fff' : 'var(--muted)';
+      btn.style.borderColor = t === type ? 'var(--accent)' : 'var(--border)';
+    }
+  });
+}
+
+// DISPLAY MOCKUP
+function switchView(view) {
+  const auto = document.getElementById('mockup-main-auto');
+  const manual = document.getElementById('mockup-main-manual');
+  const btnA = document.getElementById('btn-auto');
+  const btnM = document.getElementById('btn-manual');
+  if (view === 'auto') {
+    auto.classList.remove('hidden'); manual.classList.add('hidden');
+    btnA.classList.add('active'); btnM.classList.remove('active');
+  } else {
+    manual.classList.remove('hidden'); auto.classList.add('hidden');
+    btnM.classList.add('active'); btnA.classList.remove('active');
+  }
+}
+function selectManual(el) {
+  document.querySelectorAll('.m-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// CHECKLIST
+function toggleCheck(li) {
+  li.classList.toggle('done');
+  updateProgress();
+}
+function updateProgress() {
+  const total = document.querySelectorAll('#checklist-items li').length;
+  const done = document.querySelectorAll('#checklist-items li.done').length;
+  document.getElementById('done-count').textContent = done;
+  document.getElementById('total-count').textContent = total;
+  const pct = Math.round(done / total * 100);
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+</script>
+</body>
+</html>

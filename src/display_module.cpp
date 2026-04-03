@@ -188,7 +188,15 @@ void display_init() {
 }
 
 void display_update(const DisplayData& data) {
-    static uint32_t lastDraw = 0;
+    static uint32_t lastDraw     = 0;
+    static uint32_t lastFullDraw = 0;
+
+    // Alle 30 s Vollbild-Refresh als Sicherheitsnetz (Display eingefroren)
+    if (millis() - lastFullDraw >= 30000) {
+        _needFullDraw = true;
+        lastFullDraw  = millis();
+    }
+
     if (!_needFullDraw && millis() - lastDraw < 100) return;
     lastDraw = millis();
 
@@ -219,6 +227,9 @@ DispEvent display_handle_touch() {
 
     int tx = tp.x;
     int ty = tp.y;
+
+    Serial.printf("[Touch] x=%d y=%d  View=%s\n",
+                  tx, ty, (_view == VIEW_AUTO) ? "AUTO" : "MANUAL");
 
     if (_view == VIEW_AUTO) {
         // Touch auf die "Manual"-Karte

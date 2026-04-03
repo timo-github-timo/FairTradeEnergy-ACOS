@@ -78,6 +78,9 @@ typedef void (*Pca9555Callback)(const Pca9555Inputs& inputs);
 // Gibt true zurück wenn IC9 erreichbar ist.
 bool pca9555_init(uint8_t irqPin, Pca9555Callback callback);
 
+// true wenn IC9 erfolgreich initialisiert wurde (für Debug-Ausgaben).
+bool pca9555_is_ok();
+
 // --- Ausgänge (Port 0) ------------------------------------------
 
 void pca9555_set_grid_on(bool on);

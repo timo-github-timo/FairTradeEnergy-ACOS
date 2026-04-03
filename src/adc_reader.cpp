@@ -45,15 +45,27 @@ static float read_channel(uint8_t channel) {
     return ((float)sum / ADC_OVERSAMPLING) * (ADC_VREF / ADC_RESOLUTION);
 }
 
+// Letzter Rohwert (V_ADC vor Skalierung) — für Debug-Ausgaben
+static float _raw_grid = 0.0f;
+static float _raw_batt = 0.0f;
+static float _raw_load = 0.0f;
+
 // ----------------------------------------------------------------
 void adc_read_all(float& v_grid_out, float& v_batt_out, float& v_load_out) {
-    float v_grid_adc = read_channel(ADC_CH_GRID);
-    float v_batt_adc = read_channel(ADC_CH_BATTERY);
-    float v_load_adc = read_channel(ADC_CH_LOAD);
+    _raw_grid = read_channel(ADC_CH_GRID);
+    _raw_batt = read_channel(ADC_CH_BATTERY);
+    _raw_load = read_channel(ADC_CH_LOAD);
 
-    v_grid_out = v_grid_adc * ADC_GRID_SCALE;
-    v_batt_out = v_batt_adc * ADC_BATT_DIVIDER;
-    v_load_out = v_load_adc * ADC_GRID_SCALE;  // gleiche Messkette wie Netz
+    v_grid_out = _raw_grid * ADC_GRID_SCALE;
+    v_batt_out = _raw_batt * ADC_BATT_DIVIDER;
+    v_load_out = _raw_load * ADC_GRID_SCALE;  // gleiche Messkette wie Netz
+}
+
+// ----------------------------------------------------------------
+void adc_read_raw_voltages(float& raw_grid, float& raw_batt, float& raw_load) {
+    raw_grid = _raw_grid;
+    raw_batt = _raw_batt;
+    raw_load = _raw_load;
 }
 
 // ----------------------------------------------------------------

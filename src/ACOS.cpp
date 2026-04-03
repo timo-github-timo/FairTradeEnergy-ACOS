@@ -31,6 +31,13 @@
 // ----------------------------------------------------------------
 static OperatingMode g_mode = MODE_AUTO;
 
+// CAN TX standardmäßig deaktiviert (Beobachter-Modus ohne Platine).
+// Serial-Befehl 't' schaltet um. CAN RX läuft immer wenn MCP2515 ok.
+static bool g_can_tx_enabled = false;
+
+// Letzter Zustand der Optokoppler-Pins für Debug-Dump
+static bool g_can_init_ok = false;
+
 // ----------------------------------------------------------------
 //  PCA9555 Interrupt-Callback
 //  Läuft im IRQ-Task (Core 1, normaler Task-Kontext).
@@ -109,17 +116,22 @@ void setup() {
     Serial.println("[OK] Zustandsmaschine initialisiert.");
 
     // CAN-Bus
-    if (!can_init()) {
+    g_can_init_ok = can_init();
+    if (!g_can_init_ok) {
         Serial.println("[WARNUNG] CAN MCP2515 nicht erreichbar — CAN deaktiviert.");
     } else {
         Serial.println("[OK] CAN initialisiert.");
+        Serial.println("[INFO] CAN TX deaktiviert (Beobachter-Modus). 't' = umschalten.");
     }
 
     // Display
     display_init();
     Serial.println("[OK] Display initialisiert.");
 
-    Serial.println("[ACOS] Bereit. Serial-Befehle: a=Auto  g=Hand:Netz  i=Hand:Insel  o=Hand:Aus  c=Fehler_quit");
+    Serial.println("[ACOS] Bereit.");
+    Serial.println("  Modus:  a=Auto  g=Hand:Netz  i=Hand:Insel  o=Hand:Aus  c=Fehler_quit");
+    Serial.println("  CAN TX: t=umschalten (aktuell: AUS)");
+    Serial.println("  Debug:  d=Sofort-Dump");
 }
 
 // ----------------------------------------------------------------
@@ -186,8 +198,8 @@ void loop() {
         state  = sm_get_state();
     }
 
-    // 5. CAN Status senden (1Hz)
-    if (millis() - last_can_tx >= CAN_TX_MS) {
+    // 5. CAN Status senden (1Hz, nur wenn TX aktiv)
+    if (g_can_tx_enabled && millis() - last_can_tx >= CAN_TX_MS) {
         last_can_tx = millis();
         uint8_t flags = (uint8_t)(
             (s.grid_ok ? 0x01 : 0) |
@@ -217,22 +229,65 @@ void loop() {
     // 7. Serial-Debug (alle 2s)
     if (millis() - last_serial >= SERIAL_MS) {
         last_serial = millis();
-        Serial.printf("[ACOS] %s | %s | SOC=%d%% | VGrid=%.1fV | VBatt=%.1fV | VLoad=%.1fV | GridOK=%d | NTC=%d\n",
-                      STATE_NAMES[state], MODE_NAMES[g_mode],
-                      s.soc, s.v_grid, s.v_batt, s.v_load,
-                      s.grid_ok, s.ntc_hot);
+        float raw_grid, raw_batt, raw_load;
+        adc_read_raw_voltages(raw_grid, raw_batt, raw_load);
+        Serial.printf("[ACOS] t=%lums | %s | %s | SOC=%d%%"
+                      " | VGrid=%.1fV(roh=%.3fV) | VBatt=%.1fV(roh=%.3fV) | VLoad=%.1fV(roh=%.3fV)"
+                      " | GPIO: nVGRID=%d nVGRID_OV=%d nVLOAD=%d nVISLE=%d"
+                      " | PCA: NTC=%d VG2=%d VI2=%d VGI=%d"
+                      " | CAN-TX=%s\n",
+                      millis(),
+                      STATE_NAMES[state], MODE_NAMES[g_mode], s.soc,
+                      s.v_grid, raw_grid, s.v_batt, raw_batt, s.v_load, raw_load,
+                      digitalRead(PIN_nVGRID), digitalRead(PIN_nVGRID_OV),
+                      digitalRead(PIN_nVLOAD), digitalRead(PIN_nVISLE),
+                      g_inputs.ntc_hot, g_inputs.vg2, g_inputs.vi2, g_inputs.vgi,
+                      g_can_tx_enabled ? "EIN" : "AUS");
     }
 
-    // 8. Serial-Befehle  (Test ohne Touch)
+    // 8. Serial-Befehle
     while (Serial.available()) {
         char c = (char)Serial.read();
         switch (c) {
-            case 'a': g_mode = MODE_AUTO;         Serial.println("[Serial] Modus: Auto");        break;
-            case 'g': g_mode = MODE_HAND_GRID;    Serial.println("[Serial] Modus: Hand:Netz");   break;
-            case 'i': g_mode = MODE_HAND_ISLAND;  Serial.println("[Serial] Modus: Hand:Insel");  break;
-            case 'o': g_mode = MODE_HAND_OFF;     Serial.println("[Serial] Modus: Hand:Aus");    break;
+            case 'a': g_mode = MODE_AUTO;        Serial.println("[Serial] Modus: Auto");       break;
+            case 'g': g_mode = MODE_HAND_GRID;   Serial.println("[Serial] Modus: Hand:Netz");  break;
+            case 'i': g_mode = MODE_HAND_ISLAND; Serial.println("[Serial] Modus: Hand:Insel"); break;
+            case 'o': g_mode = MODE_HAND_OFF;    Serial.println("[Serial] Modus: Hand:Aus");   break;
             case 'c': sm_clear_error(); g_mode = MODE_AUTO;
-                      Serial.println("[Serial] Fehler quittiert");                               break;
+                      Serial.println("[Serial] Fehler quittiert");                              break;
+            case 't':
+                g_can_tx_enabled = !g_can_tx_enabled;
+                Serial.printf("[Serial] CAN TX: %s\n", g_can_tx_enabled ? "EIN" : "AUS");
+                break;
+            case 'd': {
+                // Sofort-Debug-Dump aller I/O und ADC
+                float rg, rb, rl;
+                adc_read_raw_voltages(rg, rb, rl);
+                Serial.println("=== DEBUG DUMP ===");
+                Serial.printf("  Zeit:        %lu ms\n", millis());
+                Serial.printf("  Zustand:     %s | Modus: %s\n", STATE_NAMES[state], MODE_NAMES[g_mode]);
+                Serial.println("  -- ADC --");
+                Serial.printf("  V_Grid:      %.1f V  (roh: %.4f V_ADC, Faktor: %.1f)\n",  s.v_grid, rg, ADC_GRID_SCALE);
+                Serial.printf("  V_Batt:      %.1f V  (roh: %.4f V_ADC, Faktor: %.1f)\n",  s.v_batt, rb, ADC_BATT_DIVIDER);
+                Serial.printf("  V_Load:      %.1f V  (roh: %.4f V_ADC, Faktor: %.1f)\n",  s.v_load, rl, ADC_GRID_SCALE);
+                Serial.printf("  SOC:         %d %%\n", s.soc);
+                Serial.println("  -- GPIO Optokoppler (INPUT_PULLUP, LOW=aktiv) --");
+                Serial.printf("  PIN %2d nVGRID:    %s (%s)\n", PIN_nVGRID,    digitalRead(PIN_nVGRID)    ? "HIGH" : "LOW ", s.grid_ok ? "Netz OK"    : "kein Netz");
+                Serial.printf("  PIN %2d nVGRID_OV: %s (%s)\n", PIN_nVGRID_OV, digitalRead(PIN_nVGRID_OV) ? "HIGH" : "LOW ", s.grid_ov ? "ÜBERSPANNUNG" : "OK");
+                Serial.printf("  PIN %2d nVLOAD:    %s (%s)\n", PIN_nVLOAD,    digitalRead(PIN_nVLOAD)    ? "HIGH" : "LOW ", s.load_on ? "Last an"    : "keine Last");
+                Serial.printf("  PIN %2d nVISLE:    %s (%s)\n", PIN_nVISLE,    digitalRead(PIN_nVISLE)    ? "HIGH" : "LOW ", s.isle_ok ? "Insel OK"   : "kein Insel");
+                Serial.println("  -- PCA9555 (letzter ISR-Wert) --");
+                Serial.printf("  Init:        %s\n", pca9555_is_ok() ? "OK" : "FEHLER (kein I2C)");
+                Serial.printf("  NTC_hot:     %d  VG2: %d  VI2: %d  VGI: %d\n",
+                              g_inputs.ntc_hot, g_inputs.vg2, g_inputs.vi2, g_inputs.vgi);
+                Serial.printf("  IO[0..2]:    %d  %d  %d\n",
+                              g_inputs.io[0], g_inputs.io[1], g_inputs.io[2]);
+                Serial.println("  -- CAN --");
+                Serial.printf("  MCP2515:     %s\n", g_can_init_ok ? "OK" : "FEHLER");
+                Serial.printf("  TX:          %s\n", g_can_tx_enabled ? "EIN" : "AUS (Beobachter-Modus)");
+                Serial.println("==================");
+                break;
+            }
         }
     }
 

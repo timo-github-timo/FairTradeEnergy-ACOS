@@ -12,6 +12,7 @@ static PCA9555           ic9(PCA9555_I2C_ADDR);
 static Pca9555Callback   _callback    = nullptr;
 static SemaphoreHandle_t _irq_sem     = nullptr;
 static SemaphoreHandle_t _wire_mutex  = nullptr;  // schützt alle Wire-Zugriffe
+static bool              _init_ok     = false;    // true nur wenn IC9 erreichbar
 
 // ----------------------------------------------------------------
 //  ISR  (IRAM_ATTR: liegt im internen RAM, läuft auch während
@@ -134,6 +135,7 @@ bool pca9555_init(uint8_t irqPin, Pca9555Callback callback) {
     ::pinMode(irqPin, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(irqPin), pca9555_isr, FALLING);
 
+    _init_ok = true;
     return true;
 }
 
@@ -142,24 +144,28 @@ bool pca9555_init(uint8_t irqPin, Pca9555Callback callback) {
 // ----------------------------------------------------------------
 
 void pca9555_set_grid_on(bool on) {
+    if (!_init_ok) return;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     ic9.digitalWrite(PIN_GRID_ON, on ? HIGH : LOW);
     xSemaphoreGive(_wire_mutex);
 }
 
 void pca9555_set_isle_on(bool on) {
+    if (!_init_ok) return;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     ic9.digitalWrite(PIN_ISLE_ON, on ? HIGH : LOW);
     xSemaphoreGive(_wire_mutex);
 }
 
 void pca9555_set_gi_sel(bool grid) {
+    if (!_init_ok) return;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     ic9.digitalWrite(PIN_GI_SEL, grid ? HIGH : LOW);
     xSemaphoreGive(_wire_mutex);
 }
 
 void pca9555_set_asel(uint8_t channel) {
+    if (!_init_ok) return;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     ic9.digitalWrite(PIN_ASEL1, (channel & 0x01) ? HIGH : LOW);
     ic9.digitalWrite(PIN_ASEL2, (channel & 0x02) ? HIGH : LOW);
@@ -170,7 +176,10 @@ void pca9555_set_asel(uint8_t channel) {
 //  Direkter Lesezugriff via I²C (außerhalb des Interrupt-Pfads)
 // ----------------------------------------------------------------
 
+bool pca9555_is_ok() { return _init_ok; }
+
 bool pca9555_get_ntc_hot() {
+    if (!_init_ok) return false;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     bool val = ic9.digitalRead(PIN_NTC_HOT) == HIGH;
     xSemaphoreGive(_wire_mutex);
@@ -178,6 +187,7 @@ bool pca9555_get_ntc_hot() {
 }
 
 bool pca9555_get_vg2() {
+    if (!_init_ok) return false;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     bool val = ic9.digitalRead(PIN_nVG2) == LOW;
     xSemaphoreGive(_wire_mutex);
@@ -185,6 +195,7 @@ bool pca9555_get_vg2() {
 }
 
 bool pca9555_get_vi2() {
+    if (!_init_ok) return false;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     bool val = ic9.digitalRead(PIN_nVI2) == LOW;
     xSemaphoreGive(_wire_mutex);
@@ -192,6 +203,7 @@ bool pca9555_get_vi2() {
 }
 
 bool pca9555_get_vgi() {
+    if (!_init_ok) return false;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     bool val = ic9.digitalRead(PIN_nVGI) == LOW;
     xSemaphoreGive(_wire_mutex);
@@ -199,6 +211,7 @@ bool pca9555_get_vgi() {
 }
 
 bool pca9555_get_io(uint8_t n) {
+    if (!_init_ok) return false;
     xSemaphoreTake(_wire_mutex, portMAX_DELAY);
     bool val = false;
     switch (n) {

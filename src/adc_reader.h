@@ -28,6 +28,11 @@ void adc_init();
 // Gibt kalibierte Spannungen in Volt zurück.
 void adc_read_all(float& v_grid_out, float& v_batt_out, float& v_load_out);
 
+// Letzten Rohwert (V_ADC 0–3.3V, vor Skalierung) zurückgeben.
+// Nützlich für Kalibrierung und Debug-Ausgaben.
+// Gibt den Wert des letzten adc_read_all()-Aufrufs zurück.
+void adc_read_raw_voltages(float& raw_grid, float& raw_batt, float& raw_load);
+
 // SOC aus Batteriespannung berechnen (LFP 16S LUT + EMA-Filter).
 // Erster Aufruf initialisiert den EMA-Filter direkt (kein Einschwingen).
 int8_t adc_calc_soc(float v_batt);

@@ -215,7 +215,87 @@ Bei anderer Batteriechemie oder Zellenanzahl muss diese Tabelle angepasst werden
 
 ---
 
-## 5. Noch nicht implementiert (v1.0)
+## 5. Debug-Funktionen (ohne Platine)
+
+### 5.1 Serial-Befehle (115200 Baud)
+
+| Taste | Funktion |
+|---|---|
+| `a` | Modus: Auto |
+| `g` | Modus: Hand Netz |
+| `i` | Modus: Hand Insel |
+| `o` | Modus: Hand Aus |
+| `c` | Fehler quittieren |
+| `t` | CAN TX umschalten (EIN/AUS) |
+| `d` | Sofort-Debug-Dump (alle I/O + ADC) |
+
+### 5.2 CAN Beobachter-Modus
+
+CAN TX ist **standardmäßig deaktiviert** (`g_can_tx_enabled = false` in `ACOS.cpp`).  
+CAN RX läuft immer, sofern MCP2515 erreichbar.  
+Mit `t` kann TX zur Laufzeit ein- und ausgeschaltet werden.
+
+> Zum dauerhaften Aktivieren: `g_can_tx_enabled = true` als Initialwert setzen.
+
+### 5.3 Automatischer 2s-Debug-Output (Serial)
+
+```
+[ACOS] t=12345ms | AUS | Auto | SOC=0%
+  | VGrid=0.0V(roh=0.001V) | VBatt=0.0V(roh=0.002V) | VLoad=0.0V(roh=0.001V)
+  | GPIO: nVGRID=1 nVGRID_OV=1 nVLOAD=1 nVISLE=1
+  | PCA: NTC=0 VG2=0 VI2=0 VGI=0 | CAN-TX=AUS
+```
+
+GPIO-Werte: `1` = HIGH (Optokoppler offen/inaktiv), `0` = LOW (aktiv).  
+Rohwert ADC = V_ADC vor Hardware-Skalierung → nützlich zur Kalibrierung von `ADC_GRID_SCALE` und `ADC_BATT_DIVIDER`.
+
+### 5.4 Sofort-Dump mit `d`
+
+```
+=== DEBUG DUMP ===
+  Zeit:        12345 ms
+  Zustand:     AUS | Modus: Auto
+  -- ADC --
+  V_Grid:      0.0 V  (roh: 0.0012 V_ADC, Faktor: 150.0)
+  V_Batt:      0.0 V  (roh: 0.0008 V_ADC, Faktor: 101.0)
+  V_Load:      0.0 V  (roh: 0.0010 V_ADC, Faktor: 150.0)
+  SOC:         0 %
+  -- GPIO Optokoppler (INPUT_PULLUP, LOW=aktiv) --
+  PIN  7 nVGRID:    HIGH (kein Netz)
+  PIN  5 nVGRID_OV: HIGH (OK)
+  PIN  8 nVLOAD:    HIGH (keine Last)
+  PIN 21 nVISLE:    HIGH (kein Insel)
+  -- PCA9555 (letzter ISR-Wert) --
+  Init:        FEHLER (kein I2C)
+  NTC_hot: 0  VG2: 0  VI2: 0  VGI: 0
+  IO[0..2]: 0  0  0
+  -- CAN --
+  MCP2515:     FEHLER
+  TX:          AUS (Beobachter-Modus)
+==================
+```
+
+### 5.5 Touch-Debug
+
+Jeder Touch-Event wird ins Serial geloggt:
+```
+[Touch] x=245 y=120  View=AUTO
+```
+Dient zur Überprüfung ob Touch-Events ankommen und ob Koordinaten stimmen.
+
+### 5.6 Verhalten ohne Platine (kein PCB)
+
+| Modul | Verhalten |
+|---|---|
+| PCA9555 | Init schlägt fehl → alle I²C-Operationen werden übersprungen (kein Timeout-Block mehr) |
+| ADC | Liest PIN 10 direkt – Werte sind bedeutungslos ohne Mux |
+| CAN MCP2515 | Init schlägt fehl → TX und RX deaktiviert |
+| Display | Läuft normal, Force-Refresh alle 5 s |
+| Touch | Funktioniert normal (unabhängig von Platine) |
+
+---
+
+## 7. Noch nicht implementiert (v1.0)
 
 - Netzfrequenzmessung (aktuell hardcoded 50 Hz)
 - RS485-Kommunikation (Hardware vorhanden, Software fehlt)
@@ -225,7 +305,7 @@ Bei anderer Batteriechemie oder Zellenanzahl muss diese Tabelle angepasst werden
 
 ---
 
-## 6. Deployment-Checkliste
+## 8. Deployment-Checkliste
 
 - [ ] Alle Pins gegen Schaltplan/PCB verifiziert (bes. CAN, RS485)
 - [ ] `ADC_GRID_SCALE` kalibriert (Messung gegen bekannte Spannung)
